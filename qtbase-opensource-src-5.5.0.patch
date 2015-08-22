@@ -1,9 +1,74 @@
+ src/corelib/io/qprocess.cpp                  | 12 ++++++++++++
+ src/corelib/io/qprocess.h                    |  2 ++
+ src/corelib/io/qprocess_p.h                  |  1 +
+ src/corelib/io/qprocess_win.cpp              |  2 +-
  src/network/access/qnetworkaccessmanager.cpp |  8 +++++++-
  src/network/access/qnetworkaccessmanager.h   |  3 +++
  src/network/access/qnetworkreplyhttpimpl.cpp | 11 ++++++++++-
  src/network/access/qnetworkreplyhttpimpl_p.h |  6 +++++-
- 4 files changed, 25 insertions(+), 3 deletions(-)
+ 8 files changed, 41 insertions(+), 4 deletions(-)
 
+diff --git a/src/corelib/io/qprocess.cpp b/src/corelib/io/qprocess.cpp
+index 1842541..affa266 100644
+--- a/src/corelib/io/qprocess.cpp
++++ b/src/corelib/io/qprocess.cpp
+@@ -1508,6 +1508,18 @@ void QProcess::setNativeArguments(const QString &arguments)
+     d->nativeArguments = arguments;
+ }
+ 
++QString QProcess::nativeProgram() const
++{
++    Q_D(const QProcess);
++    return d->nativeProgram;
++}
++
++void QProcess::setNativeProgram(const QString &program)
++{
++    Q_D(QProcess);
++    d->nativeProgram = program;
++}
++
+ #endif
+ 
+ /*!
+diff --git a/src/corelib/io/qprocess.h b/src/corelib/io/qprocess.h
+index 078217e..2f1cf79 100644
+--- a/src/corelib/io/qprocess.h
++++ b/src/corelib/io/qprocess.h
+@@ -164,6 +164,8 @@ public:
+ #if defined(Q_OS_WIN)
+     QString nativeArguments() const;
+     void setNativeArguments(const QString &arguments);
++    QString nativeProgram() const;
++    void setNativeProgram(const QString &program);
+ #endif
+ 
+     QString workingDirectory() const;
+diff --git a/src/corelib/io/qprocess_p.h b/src/corelib/io/qprocess_p.h
+index f6bd64f..7641215 100644
+--- a/src/corelib/io/qprocess_p.h
++++ b/src/corelib/io/qprocess_p.h
+@@ -329,6 +329,7 @@ public:
+     QStringList arguments;
+ #if defined(Q_OS_WIN)
+     QString nativeArguments;
++    QString nativeProgram;
+ #endif
+     QProcessEnvironment environment;
+ 
+diff --git a/src/corelib/io/qprocess_win.cpp b/src/corelib/io/qprocess_win.cpp
+index cef961e..8f8b16e 100644
+--- a/src/corelib/io/qprocess_win.cpp
++++ b/src/corelib/io/qprocess_win.cpp
+@@ -499,7 +499,7 @@ void QProcessPrivate::startProcess()
+                                  0, 0, 0,
+                                  stdinChannel.pipe[0], stdoutChannel.pipe[1], stderrChannel.pipe[1]
+     };
+-    success = CreateProcess(0, (wchar_t*)args.utf16(),
++    success = CreateProcess(nativeProgram.isEmpty() ? 0 : (wchar_t*)nativeProgram.utf16(), (wchar_t*)args.utf16(),
+                             0, 0, TRUE, dwCreationFlags,
+                             environment.isEmpty() ? 0 : envlist.data(),
+                             workingDirectory.isEmpty() ? 0 : (wchar_t*)QDir::toNativeSeparators(workingDirectory).utf16(),
 diff --git a/src/network/access/qnetworkaccessmanager.cpp b/src/network/access/qnetworkaccessmanager.cpp
 index e878feb..d5b6ebc 100644
 --- a/src/network/access/qnetworkaccessmanager.cpp
