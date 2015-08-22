@@ -1,0 +1,106 @@
+ src/network/access/qnetworkaccessmanager.cpp |  8 +++++++-
+ src/network/access/qnetworkaccessmanager.h   |  3 +++
+ src/network/access/qnetworkreplyhttpimpl.cpp | 11 ++++++++++-
+ src/network/access/qnetworkreplyhttpimpl_p.h |  6 +++++-
+ 4 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/network/access/qnetworkaccessmanager.cpp b/src/network/access/qnetworkaccessmanager.cpp
+index e878feb..d5b6ebc 100644
+--- a/src/network/access/qnetworkaccessmanager.cpp
++++ b/src/network/access/qnetworkaccessmanager.cpp
+@@ -1109,6 +1109,12 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
+                                                     const QNetworkRequest &req,
+                                                     QIODevice *outgoingData)
+ {
++    return createRequestEx(op, req, outgoingData);
++}
++QNetworkReply *QNetworkAccessManager::createRequestEx(Operation op, const QNetworkRequest &req,
++                                                      QIODevice *outgoingData,
++                                                      const QString &realHost, int realPort)
++{
+     Q_D(QNetworkAccessManager);
+ 
+     bool isLocalFile = req.url().isLocalFile();
+@@ -1206,7 +1212,7 @@ QNetworkReply *QNetworkAccessManager::createRequest(QNetworkAccessManager::Opera
+         || scheme == QLatin1String("https") || scheme == QLatin1String("preconnect-https")
+ #endif
+         ) {
+-        QNetworkReplyHttpImpl *reply = new QNetworkReplyHttpImpl(this, request, op, outgoingData);
++        QNetworkReplyHttpImpl *reply = new QNetworkReplyHttpImpl(this, request, op, outgoingData, realHost, realPort);
+ #ifndef QT_NO_BEARERMANAGEMENT
+         connect(this, SIGNAL(networkSessionConnected()),
+                 reply, SLOT(_q_networkSessionConnected()));
+diff --git a/src/network/access/qnetworkaccessmanager.h b/src/network/access/qnetworkaccessmanager.h
+index 988eafa..3c66b65 100644
+--- a/src/network/access/qnetworkaccessmanager.h
++++ b/src/network/access/qnetworkaccessmanager.h
+@@ -158,6 +158,9 @@ Q_SIGNALS:
+ protected:
+     virtual QNetworkReply *createRequest(Operation op, const QNetworkRequest &request,
+                                          QIODevice *outgoingData = 0);
++    virtual QNetworkReply *createRequestEx(Operation op, const QNetworkRequest &request,
++                                           QIODevice *outgoingData = 0,
++                                           const QString &realHost ="", int realPort = -1);
+ 
+ protected Q_SLOTS:
+     QStringList supportedSchemesImplementation() const;
+diff --git a/src/network/access/qnetworkreplyhttpimpl.cpp b/src/network/access/qnetworkreplyhttpimpl.cpp
+index c445677..5eb7710 100644
+--- a/src/network/access/qnetworkreplyhttpimpl.cpp
++++ b/src/network/access/qnetworkreplyhttpimpl.cpp
+@@ -159,7 +159,8 @@ static QHash<QByteArray, QByteArray> parseHttpOptionHeader(const QByteArray &hea
+ QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manager,
+                                              const QNetworkRequest& request,
+                                              QNetworkAccessManager::Operation& operation,
+-                                             QIODevice* outgoingData)
++                                             QIODevice* outgoingData,
++                                             const QString &realHost, int realPort)
+     : QNetworkReply(*new QNetworkReplyHttpImplPrivate, manager)
+ {
+     Q_D(QNetworkReplyHttpImpl);
+@@ -172,6 +173,8 @@ QNetworkReplyHttpImpl::QNetworkReplyHttpImpl(QNetworkAccessManager* const manage
+ #ifndef QT_NO_SSL
+     d->sslConfiguration = request.sslConfiguration();
+ #endif
++    d->realHost = realHost;
++    d->realPort = realPort;
+ 
+     // FIXME Later maybe set to Unbuffered, especially if it is zerocopy or from cache?
+     QIODevice::open(QIODevice::ReadOnly);
+@@ -771,6 +774,12 @@ void QNetworkReplyHttpImplPrivate::postRequest()
+ 
+     // Set the properties it needs
+     delegate->httpRequest = httpRequest;
++    if (!realHost.isEmpty() || realPort >= 0) {
++        QUrl url = delegate->httpRequest.url();
++        if (!realHost.isEmpty()) url.setHost(realHost);
++        if (realPort >= 0) url.setPort(realPort);
++        delegate->httpRequest.setUrl(url);
++    }
+ #ifndef QT_NO_NETWORKPROXY
+     delegate->cacheProxy = cacheProxy;
+     delegate->transparentProxy = transparentProxy;
+diff --git a/src/network/access/qnetworkreplyhttpimpl_p.h b/src/network/access/qnetworkreplyhttpimpl_p.h
+index b009092..9db7d3e 100644
+--- a/src/network/access/qnetworkreplyhttpimpl_p.h
++++ b/src/network/access/qnetworkreplyhttpimpl_p.h
+@@ -75,7 +75,7 @@ class QNetworkReplyHttpImpl: public QNetworkReply
+ {
+     Q_OBJECT
+ public:
+-    QNetworkReplyHttpImpl(QNetworkAccessManager* const, const QNetworkRequest&, QNetworkAccessManager::Operation&, QIODevice* outgoingData);
++    QNetworkReplyHttpImpl(QNetworkAccessManager* const, const QNetworkRequest&, QNetworkAccessManager::Operation&, QIODevice* outgoingData, const QString &realHost, int realPort);
+     virtual ~QNetworkReplyHttpImpl();
+ 
+     void close() Q_DECL_OVERRIDE;
+@@ -217,6 +217,10 @@ public:
+     QIODevice *cacheSaveDevice;
+     bool cacheEnabled; // is this for saving?
+ 
++    // host name redirect
++    QString realHost;
++    int realPort;
++
+ 
+     QUrl urlForLastAuthentication;
+ #ifndef QT_NO_NETWORKPROXY
